@@ -35,7 +35,15 @@ cef push --env dev --bucket <bucketId> --as-pubkey <asPubkeyHex>
 
 `cef dev` is the primary test loop — it authenticates against your dev vault
 exactly the way a standalone link does in production, so what you see locally is
-what a user gets. `cef build` bakes the widget's manifest and a `<script>` tag
+what a user gets.
+
+> **Known broken as of 2026-09-14.** That standalone sign-in still runs through
+> the legacy `@cere/embed-wallet`, whose login depends on `beta.openlogin.com` —
+> a host that no longer resolves. The wallet popup opens and never completes, so
+> a dev loop that needs live vault data is blocked. Tracked in CEF-AI/sdk#144
+> (with CEF-AI/sdk#146 carrying the replacement). Until that lands, test a widget
+> that needs an identity by framing it and mounting a host — see
+> [Hosting a widget yourself](#hosting-a-widget-yourself). `cef build` bakes the widget's manifest and a `<script>` tag
 for the runtime into the built output; `cef push` just uploads it.
 
 `cef dev [widgetId]` targets one widget by its declared `id`. Endpoints for the
