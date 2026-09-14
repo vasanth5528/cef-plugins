@@ -4,8 +4,9 @@ A **widget** is a small web UI an agent ships alongside its bundle. At runtime a
 widget reads and writes the **viewing user's own vault** — as the connected
 agent — through an injected `window.WidgetRuntime`. No secret is baked into the
 widget; the user's key material stays in their wallet. The same widget renders
-two ways: **embedded** inside a host (the Cere Vault) and **standalone** via a
-direct link. Both talk to the SAME agent's cubby for the SAME user.
+two ways: **embedded** inside a host (the Cere Vault, or any page that
+implements the host contract) and **standalone** via a direct link. Both talk to
+the SAME agent's cubby for the SAME user.
 
 You author a widget as source, iterate against your dev vault with `cef dev`,
 and ship it with `cef build` + `cef push`.
@@ -214,18 +215,73 @@ disconnects, or the agent's status changes.
 The same widget runs in two modes; you write it once and the runtime handles the
 difference.
 
-- **Embedded** — the widget runs inside a host (the Cere Vault). The host
+- **Embedded** — the widget is framed by a host (the Cere Vault, or your own
+  page — see [Hosting a widget yourself](#hosting-a-widget-yourself)). The host
   supplies identity and signing over a bridge; the user is already
   authenticated, so `connect()` resolves immediately.
-- **Standalone** — the widget is opened via a direct link. The runtime
-  authenticates the user itself with an interactive Cere wallet connect (a
-  popup). `cef dev` runs in this mode, so local iteration matches production
-  standalone.
+- **Standalone** — the widget is opened via a direct link, top-level (not
+  framed). The runtime authenticates the user itself with an interactive Cere
+  wallet connect (a popup). `cef dev` runs in this mode, so local iteration
+  matches production standalone.
+
+Which mode you get is decided by **framing, not by whether a host answers**. A
+framed widget whose host never answers the handshake fails with
+`WidgetSignedOutError`; it does *not* fall back to the wallet popup. Only a
+top-level widget takes the standalone path.
 
 In both modes the widget queries the **same agent's cubby for the same user** —
 the only difference is where the identity comes from. Don't assume a host is
 present: rely on `WidgetRuntime` (which works in both) rather than reaching for
 host-specific globals.
+
+## Hosting a widget yourself
+
+Reach for this when something other than the Cere Vault frames your widget and
+**already has the user authenticated** — a browser-extension panel, a partner
+app, your own dashboard. Instead of making the user connect a second wallet
+inside the iframe, the host hands its existing identity down over the published
+widget↔host contract. `@cef-ai/widget-runtime` ships the host side:
+
+```ts
+import { createWidgetHost } from "@cef-ai/widget-runtime";
+
+const dispose = createWidgetHost({
+  widget: document.querySelector("iframe#my-widget"),   // who may ask — required
+
+  // Return null while nobody is signed in; the widget retries for ~8 s.
+  getIdentity: () => (session.ready ? { pubkey: session.pubkey, sigType: "ed25519" } : null),
+
+  // Sign the bytes VERBATIM.
+  sign: (bytes) => session.request({ method: "ed25519_signRaw", params: [bytes] }),
+});
+
+// on unmount
+dispose();
+```
+
+Three rules that are not optional:
+
+- **Gate the listener.** `createWidgetHost` throws at mount unless you pass
+  `widget` (the iframe element or its `contentWindow`) and/or a non-empty
+  `allowedOrigins`. An ungated host is a signing oracle: any frame, opener, or
+  popup on the page could have you sign arbitrary bytes with the user's key.
+  Prefer `widget` — a sandboxed widget's origin is `"null"`, which no origin
+  list can tell apart from any other sandboxed frame.
+- **Sign verbatim with `ed25519_signRaw`.** Never route `sign` to the
+  high-level `signMessage` / `wallet_signMessage`: those wrap the payload in
+  Substrate's `<Bytes>…</Bytes>` envelope, and a signature over the wrapped form
+  verifies nowhere — not in GAR, not at the DDC gateway. `createWidgetHost`
+  hands your signer a `Uint8Array` and converts to and from the `number[]` wire
+  form itself.
+- **Answer, or the widget is signed out.** A framed widget has no wallet
+  fallback. If you frame a widget and don't mount a host, it fails with
+  `WidgetSignedOutError` rather than opening a wallet popup of its own.
+
+Messages carry a protocol version `v` (currently `1`); a message with no `v` is
+treated as v1, so hosts written before versioning keep working. An unrecognised
+`v` fails loudly with `WidgetProtocolVersionError` instead of being ignored.
+The message types, response shapes, and both error classes are exported from
+`@cef-ai/widget-runtime`; the full protocol table is in that package's README.
 
 ## The manifest
 
@@ -277,6 +333,9 @@ can keep its query logic in the JS — `query("SELECT text, ts FROM messages …
   intend to run in; there is no runtime environment switch.
 - **Don't depend on a host.** Standalone has no host bridge — use
   `WidgetRuntime`, not host-only globals, so the widget works in both modes.
+- **If you frame the widget, you must host it.** A framed widget never falls
+  back to the wallet popup — mount `createWidgetHost` on the framing page or
+  the widget comes up `WidgetSignedOutError`.
 - **Reference siblings with `./relative` paths.** The widget is served as one
   directory; absolute/external URLs won't resolve.
 - **`id` must be unique within the agent** and is what `cef dev [widgetId]`
