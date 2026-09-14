@@ -246,7 +246,7 @@ widget↔host contract. `@cef-ai/widget-runtime` ships the host side:
 import { createWidgetHost } from "@cef-ai/widget-runtime";
 
 const dispose = createWidgetHost({
-  widget: document.querySelector("iframe#my-widget"),   // who may ask — required
+  widget: document.querySelector<HTMLIFrameElement>("iframe#my-widget")!,  // who may ask — required
 
   // Return null while nobody is signed in; the widget retries for ~8 s.
   getIdentity: () => (session.ready ? { pubkey: session.pubkey, sigType: "ed25519" } : null),
@@ -272,7 +272,9 @@ Three rules that are not optional:
   Substrate's `<Bytes>…</Bytes>` envelope, and a signature over the wrapped form
   verifies nowhere — not in GAR, not at the DDC gateway. `createWidgetHost`
   hands your signer a `Uint8Array` and converts to and from the `number[]` wire
-  form itself.
+  form itself, rejecting anything that is not at most 64 KiB of integers 0-255
+  before your signer sees it. The widget abandons a sign request after 60 s, so
+  a consent prompt the user leaves sitting open fails rather than hangs.
 - **Answer, or the widget is signed out.** A framed widget has no wallet
   fallback. If you frame a widget and don't mount a host, it fails with
   `WidgetSignedOutError` rather than opening a wallet popup of its own.
