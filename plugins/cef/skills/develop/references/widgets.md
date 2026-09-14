@@ -246,7 +246,13 @@ widget↔host contract. `@cef-ai/widget-runtime` ships the host side:
 import { createWidgetHost } from "@cef-ai/widget-runtime";
 
 const dispose = createWidgetHost({
-  widget: document.querySelector<HTMLIFrameElement>("iframe#my-widget")!,  // who may ask — required
+  // REQUIRED, non-empty — the only gate that pins WHICH DOCUMENT may ask.
+  // Canonical origins exactly as `event.origin` spells them: no trailing
+  // slash, no path, lower-case, no "*". Use ["null"] for a sandboxed widget.
+  allowedOrigins: ["https://widget.example"],
+
+  // Optional EXTRA narrowing to one frame. When both are given, both must pass.
+  widget: document.querySelector<HTMLIFrameElement>("iframe#my-widget")!,
 
   // Return null while nobody is signed in; the widget retries for ~8 s.
   getIdentity: () => (session.ready ? { pubkey: session.pubkey, sigType: "ed25519" } : null),
@@ -261,12 +267,20 @@ dispose();
 
 Three rules that are not optional:
 
-- **Gate the listener.** `createWidgetHost` throws at mount unless you pass
-  `widget` (the iframe element or its `contentWindow`) and/or a non-empty
-  `allowedOrigins`. An ungated host is a signing oracle: any frame, opener, or
-  popup on the page could have you sign arbitrary bytes with the user's key.
-  Prefer `widget` — a sandboxed widget's origin is `"null"`, which no origin
-  list can tell apart from any other sandboxed frame.
+- **Gate the listener on `allowedOrigins`.** It is required and must be
+  non-empty; `createWidgetHost` throws at mount without it, and throws again on
+  any entry that is not a canonical origin (a trailing slash, a path, a default
+  port, or `"*"` all fail). An ungated host is a signing oracle: any frame,
+  opener, or popup on the page could have you sign arbitrary bytes with the
+  user's key. `widget` (the iframe element or its `contentWindow`) is an
+  optional **extra** narrowing, never a replacement — a `WindowProxy` keeps its
+  identity across navigation, cross-origin included, so `event.source ===
+  iframe.contentWindow` still matches after the framed page follows an open
+  redirect or navigates itself. The handle names the frame *slot*; only the
+  origin names the document in it. A sandboxed widget reports the literal
+  origin `"null"`, so gate it with `allowedOrigins: ["null"]` — and add `widget`
+  too if any other sandboxed frame can reach the page, since every one of them
+  reports `"null"`.
 - **Sign verbatim with `ed25519_signRaw`.** Never route `sign` to the
   high-level `signMessage` / `wallet_signMessage`: those wrap the payload in
   Substrate's `<Bytes>…</Bytes>` envelope, and a signature over the wrapped form
