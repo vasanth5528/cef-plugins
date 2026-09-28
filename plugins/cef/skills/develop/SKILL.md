@@ -107,6 +107,7 @@ npx cef typegen                 # after editing cef.config.ts: refresh .cef/gene
 npx cef dev [widgetId]          # local widget dev server: standalone browser auth + file-watch
 npx cef build                   # lint entry + bundle → dist/<agentId>/{bundle.js, manifest.json}
 npx cef inspect dist/<agentId>  # verify exposed __handlers match manifest routing
+                                # add --json for one pipeable JSON document (exit code unchanged)
 npx vitest run                  # run the @cef-ai/testing simulator tests  (or: pnpm test)
 ```
 

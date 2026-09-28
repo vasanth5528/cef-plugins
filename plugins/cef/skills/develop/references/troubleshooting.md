@@ -77,4 +77,7 @@ Run `pnpm test` (or `npx vitest run`) and add a case for the failing event.
 - **Read the cubby** with a `query` (in a widget or a `testAgent` assertion) to
   see what's actually stored.
 - **`cef inspect dist/<agentId>`** verifies the built bundle's handlers match the
-  manifest routing (catches "event handled but nothing happened").
+  manifest routing (catches "event handled but nothing happened"). With `--json`
+  the same check prints one JSON document — pipe it to `jq` when the report is
+  long, and keep `set -o pipefail` so the missing-handler exit 2 still fails the
+  step.

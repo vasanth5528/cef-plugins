@@ -190,4 +190,6 @@ model alias; banned imports abort the build.
 Support commands: **`cef typegen`** regenerates `.cef/generated.d.ts`
 (populates `KnownEventTypes` for `@OnEvent`/`ctx.publish` autocomplete) and
 `cef.lock.json`. **`cef inspect <agentDir>`** runs the built bundle in `node:vm`
-and reports exposed `__handlers` names vs. manifest routing targets.
+and reports exposed `__handlers` names vs. manifest routing targets. Pass
+`--json` to get that report as a single JSON document on stdout (for `jq` or a
+CI step); the exit code is unchanged — 2 when a referenced handler is missing.
